@@ -1,6 +1,7 @@
 {
   "name": "ledgerline",
   "version": "1.0.0",
+  "type": "module",
   "description": "Secure, concurrency-safe double-entry financial ledger system",
   "main": "dist/index.js",
   "scripts": {

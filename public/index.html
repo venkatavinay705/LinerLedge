@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LedgerLine | Concurrency-Safe Double-Entry Financial Ledger</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">Ledger<span>Line</span></div>
+    <div id="authNav" class="user-status">
+      <span id="userInfo" style="display: none;"></span>
+      <button id="logoutBtn" class="btn btn-secondary" style="display: none;">Logout</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div id="alertBox" style="display: none;"></div>
+
+    <!-- 1. Authentication View -->
+    <div id="authSection" class="card" style="max-width: 480px; margin: 2rem auto;">
+      <h2>Sign In to LedgerLine</h2>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="quickLogin('admin@ledgerline.test', 'AdminPassword123!')">Admin Demo</button>
+        <button class="btn btn-secondary" onclick="quickLogin('alice@ledgerline.test', 'AlicePassword123!')">Alice Demo</button>
+        <button class="btn btn-secondary" onclick="quickLogin('bob@ledgerline.test', 'BobPassword123!')">Bob Demo</button>
+        <button class="btn btn-secondary" onclick="quickLogin('auditor@ledgerline.test', 'AuditorPassword123!')">Auditor Demo</button>
+      </div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="loginEmail" required value="alice@ledgerline.test">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="loginPassword" required value="AlicePassword123!">
+        </div>
+        <button type="submit" class="btn" style="width: 100%;">Sign In</button>
+      </form>
+    </div>
+
+    <!-- 2. Dashboard View -->
+    <div id="dashboardSection" style="display: none;">
+      <!-- Accounts Summary -->
+      <div class="card" style="margin-bottom: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h2>Your Permitted Accounts</h2>
+          <button class="btn btn-secondary" onclick="loadAccounts()">Refresh</button>
+        </div>
+        <div style="overflow-x: auto;">
+          <table id="accountsTable">
+            <thead>
+              <tr>
+                <th>Account Number</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Balance</th>
+                <th>Overdraft Limit</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="accountsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Money Movement Operations -->
+      <div class="grid">
+        <!-- Deposit Form -->
+        <div class="card">
+          <h2>Deposit Funds</h2>
+          <form id="depositForm">
+            <div class="form-group">
+              <label>Target Account</label>
+              <select id="depositAccountSelect" required></select>
+            </div>
+            <div class="form-group">
+              <label>Amount (USD Cents or Dollars, e.g. 50.00)</label>
+              <input type="number" step="0.01" min="0.01" id="depositAmount" placeholder="100.00" required>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" id="depositDescription" placeholder="Salary, Wire, Check deposit">
+            </div>
+            <div class="form-group">
+              <label>Idempotency Key (Auto-generated)</label>
+              <input type="text" id="depositIdempotencyKey" readonly>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;">Post Deposit</button>
+          </form>
+        </div>
+
+        <!-- Withdrawal Form -->
+        <div class="card">
+          <h2>Withdraw Funds</h2>
+          <form id="withdrawForm">
+            <div class="form-group">
+              <label>Source Account</label>
+              <select id="withdrawAccountSelect" required></select>
+            </div>
+            <div class="form-group">
+              <label>Amount (USD, e.g. 25.00)</label>
+              <input type="number" step="0.01" min="0.01" id="withdrawAmount" placeholder="25.00" required>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" id="withdrawDescription" placeholder="ATM, Cash withdrawal">
+            </div>
+            <div class="form-group">
+              <label>Idempotency Key (Auto-generated)</label>
+              <input type="text" id="withdrawIdempotencyKey" readonly>
+            </div>
+            <button type="submit" class="btn btn-danger" style="width: 100%;">Post Withdrawal</button>
+          </form>
+        </div>
+
+        <!-- Transfer Form -->
+        <div class="card">
+          <h2>Transfer Funds</h2>
+          <form id="transferForm">
+            <div class="form-group">
+              <label>Source Account (Transfer Out)</label>
+              <select id="transferSourceSelect" required></select>
+            </div>
+            <div class="form-group">
+              <label>Destination Account ID</label>
+              <input type="text" id="transferDestId" placeholder="Destination Account UUID" required>
+            </div>
+            <div class="form-group">
+              <label>Amount (USD, e.g. 50.00)</label>
+              <input type="number" step="0.01" min="0.01" id="transferAmount" placeholder="50.00" required>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" id="transferDescription" placeholder="Payment, Rent, P2P transfer">
+            </div>
+            <div class="form-group">
+              <label>Idempotency Key (Auto-generated)</label>
+              <input type="text" id="transferIdempotencyKey" readonly>
+            </div>
+            <button type="submit" class="btn" style="width: 100%;">Execute Transfer</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Account Statement View -->
+      <div class="card" style="margin-bottom: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+          <h2>Account Statement & Audit Trail</h2>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="statementAccountSelect" onchange="loadStatement()"></select>
+            <button class="btn btn-secondary" onclick="loadStatement()">Fetch Statement</button>
+          </div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Date / Time</th>
+                <th>Type</th>
+                <th>Action</th>
+                <th>Amount</th>
+                <th>Running Balance</th>
+                <th>Outcome</th>
+                <th>Description / Reason</th>
+              </tr>
+            </thead>
+            <tbody id="statementBody">
+              <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Select an account to view statement</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Auditor / Admin Operations -->
+      <div id="auditSection" class="card" style="display: none; margin-bottom: 2rem;">
+        <h2>Auditor & Reconciliation Control Panel</h2>
+        <div class="btn-group">
+          <button class="btn" onclick="verifyChain()">Verify Hash Chain</button>
+          <button class="btn btn-secondary" onclick="runReconciliation()">Reconcile Balances</button>
+          <a href="/docs" target="_blank" class="btn btn-secondary" style="text-decoration: none;">Interactive Swagger Docs (/docs)</a>
+        </div>
+        <div id="auditResultBox" style="display: none;" class="alert"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

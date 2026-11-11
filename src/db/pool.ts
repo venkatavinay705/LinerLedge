@@ -95,6 +95,7 @@ class PGliteClientWrapper implements IDatabaseClient {
 
 class PGlitePoolWrapper implements IDatabasePool {
   private pglite: PGlite;
+  private queue: Promise<void> = Promise.resolve();
 
   constructor(pglite?: PGlite) {
     this.pglite = pglite || new PGlite();
@@ -113,7 +114,23 @@ class PGlitePoolWrapper implements IDatabasePool {
   }
 
   async connect(): Promise<IDatabaseClient> {
-    return new PGliteClientWrapper(this.pglite);
+    let releaseLock!: () => void;
+    const lockAcquired = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    const previousQueue = this.queue;
+    this.queue = this.queue.then(() => lockAcquired);
+
+    await previousQueue;
+
+    let released = false;
+    return new PGliteClientWrapper(this.pglite, () => {
+      if (!released) {
+        released = true;
+        releaseLock();
+      }
+    });
   }
 
   async end(): Promise<void> {

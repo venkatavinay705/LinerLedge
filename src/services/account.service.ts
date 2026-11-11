@@ -5,9 +5,8 @@ import {
   AccountType,
   AuthActor,
   PermissionType,
-  TransactionAttempt,
 } from '../types/index.js';
-import { NotFoundError, ForbiddenError, AppError } from '../utils/errors.js';
+import { NotFoundError } from '../utils/errors.js';
 
 export interface CreateAccountData {
   account_number: string;
@@ -186,94 +185,7 @@ export class AccountService {
     const limit = Math.max(1, Math.min(100, options.limit || 50));
     const offset = (page - 1) * limit;
 
-    // 1. Fetch posted ledger entries for this account
-    const entriesParams: any[] = [accountId];
-    let dateFilter = '';
-    if (options.from) {
-      entriesParams.push(new Date(options.from));
-      dateFilter += ` AND le.created_at >= $${entriesParams.length}`;
-    }
-    if (options.to) {
-      entriesParams.push(new Date(options.to));
-      dateFilter += ` AND le.created_at <= $${entriesParams.length}`;
-    }
-
-    const entriesSql = `
-      SELECT 
-        le.id,
-        'POSTED_ENTRY' AS entry_type,
-        le.transaction_id,
-        t.type AS action,
-        le.direction,
-        le.amount,
-        le.balance_after AS running_balance,
-        t.initiated_by AS actor_id,
-        'SUCCESS' AS outcome,
-        NULL AS reason_code,
-        le.created_at AS timestamp,
-        t.description
-      FROM ledger_entries le
-      JOIN transactions t ON le.transaction_id = t.id
-      WHERE le.account_id = $1 ${dateFilter}
-    `;
-
-    // 2. Fetch refused/failed attempts for this account
-    const attemptsParams: any[] = [accountId];
-    let attemptDateFilter = '';
-    if (options.from) {
-      attemptsParams.push(new Date(options.from));
-      attemptDateFilter += ` AND created_at >= $${attemptsParams.length}`;
-    }
-    if (options.to) {
-      attemptsParams.push(new Date(options.to));
-      attemptDateFilter += ` AND created_at <= $${attemptsParams.length}`;
-    }
-
-    const attemptsSql = `
-      SELECT 
-        id,
-        'REFUSED_ATTEMPT' AS entry_type,
-        transaction_id,
-        action,
-        NULL AS direction,
-        amount,
-        NULL AS running_balance,
-        actor_id,
-        outcome,
-        reason_code,
-        created_at AS timestamp,
-        reason_code AS description
-      FROM transaction_attempts
-      WHERE (source_account_id = $1 OR destination_account_id = $1)
-        AND outcome IN ('REFUSED', 'FAILED')
-        ${attemptDateFilter}
-    `;
-
-    // Union both queries and order by timestamp descending
-    const unionSql = `
-      WITH combined AS (
-        (${entriesSql})
-        UNION ALL
-        (${attemptsSql})
-      )
-      SELECT * FROM combined
-      ORDER BY timestamp DESC
-      LIMIT $${entriesParams.length + attemptsParams.length}
-      OFFSET $${entriesParams.length + attemptsParams.length + 1};
-    `;
-
-    // Calculate total count
-    const countSql = `
-      WITH combined AS (
-        (${entriesSql})
-        UNION ALL
-        (${attemptsSql})
-      )
-      SELECT COUNT(*) AS count FROM combined;
-    `;
-
-    // To cleanly execute parameterized UNION with different param offsets:
-    // We can run each subquery or build clean sequential params
+    // 1. Fetch posted ledger entries and refused attempts for this account
     const allParams: any[] = [accountId];
     let filter1 = '';
     let filter2 = '';

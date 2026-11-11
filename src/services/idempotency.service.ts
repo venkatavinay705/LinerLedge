@@ -76,6 +76,10 @@ export class IdempotencyService {
     const db = client || (await this.getPool());
 
     try {
+      const serializedBody = JSON.stringify(responseBody, (_key, value) =>
+        typeof value === 'bigint' ? value.toString() : value
+      );
+
       await db.query(
         `INSERT INTO idempotency_keys (
           actor_id, key, request_hash, response_status, response_body, transaction_id
@@ -84,7 +88,7 @@ export class IdempotencyService {
         SET response_status = EXCLUDED.response_status,
             response_body = EXCLUDED.response_body,
             transaction_id = EXCLUDED.transaction_id;`,
-        [actorId, key, requestHash, statusCode, JSON.stringify(responseBody), transactionId]
+        [actorId, key, requestHash, statusCode, serializedBody, transactionId]
       );
     } catch (err) {
       logger.error({ error: err, actorId, key }, 'Failed to record idempotency key');

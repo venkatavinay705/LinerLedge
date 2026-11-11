@@ -1,0 +1,340 @@
+openapi: 3.0.3
+info:
+  title: LedgerLine API
+  version: 1.0.0
+  description: >
+    Production-grade double-entry financial ledger system with row-level pessimistic locking,
+    tamper-evident SHA-256 hash chaining, strict DB-level constraints, and complete idempotency.
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://ledgerline.onrender.com
+    description: Cloud deployment
+
+paths:
+  /health:
+    get:
+      summary: Health check probe
+      responses:
+        '200':
+          description: System is healthy
+  /api/v1/auth/login:
+    post:
+      summary: Authenticate user and receive JWT access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  example: alice@ledgerline.test
+                password:
+                  type: string
+                  example: AlicePassword123!
+      responses:
+        '200':
+          description: Authentication successful
+        '401':
+          description: Invalid email or password
+  /api/v1/auth/me:
+    get:
+      summary: Get currently authenticated actor details
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+  /api/v1/accounts:
+    get:
+      summary: List accounts permitted to the authenticated actor
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of permitted accounts
+    post:
+      summary: Create a new account (ADMIN only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_number, name]
+              properties:
+                account_number:
+                  type: string
+                  example: ACC-TEST-100
+                name:
+                  type: string
+                  example: Checking Account
+                type:
+                  type: string
+                  enum: [CUSTOMER, SYSTEM]
+                  default: CUSTOMER
+                currency:
+                  type: string
+                  default: USD
+                allow_overdraft:
+                  type: boolean
+                  default: false
+                overdraft_limit:
+                  type: integer
+                  description: Overdraft limit in cents
+                  default: 0
+      responses:
+        '201':
+          description: Account created successfully
+  /api/v1/accounts/{id}:
+    get:
+      summary: Retrieve specific account by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account details
+        '404':
+          description: Account not found or forbidden
+  /api/v1/accounts/{id}/status:
+    patch:
+      summary: Update account status (ADMIN only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [ACTIVE, FROZEN, CLOSED]
+      responses:
+        '200':
+          description: Account status updated
+  /api/v1/accounts/{id}/permissions:
+    put:
+      summary: Set user permissions on account (ADMIN only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, permissions]
+              properties:
+                user_id:
+                  type: string
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                    enum: [VIEW, DEPOSIT, WITHDRAW, TRANSFER_OUT]
+      responses:
+        '200':
+          description: Permissions set
+  /api/v1/accounts/{id}/deposit:
+    post:
+      summary: Post a verified double-entry deposit
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: integer
+                  description: Integer minor units (cents)
+                  example: 10000
+                description:
+                  type: string
+                  example: Direct deposit
+      responses:
+        '201':
+          description: Deposit posted
+        '422':
+          description: Idempotency key reused with different payload
+  /api/v1/accounts/{id}/withdraw:
+    post:
+      summary: Post a verified double-entry withdrawal
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: integer
+                  description: Integer minor units (cents)
+                  example: 5000
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Withdrawal posted
+        '400':
+          description: Insufficient funds or invalid amount
+  /api/v1/transfers:
+    post:
+      summary: Execute atomic, deadlock-free double-entry transfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_account_id, destination_account_id, amount]
+              properties:
+                source_account_id:
+                  type: string
+                destination_account_id:
+                  type: string
+                amount:
+                  type: integer
+                  example: 2500
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Transfer executed
+        '400':
+          description: Insufficient funds or self-transfer
+  /api/v1/accounts/{id}/statement:
+    get:
+      summary: Fetch statement with ledger entries and refused attempts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Account statement
+  /api/v1/audit/attempts:
+    get:
+      summary: Query transaction attempt audit logs (ADMIN / AUDITOR)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Audit logs list
+  /api/v1/audit/ledger:
+    get:
+      summary: Query raw ledger entries with pagination (ADMIN / AUDITOR)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ledger entries
+  /api/v1/audit/verify-chain:
+    get:
+      summary: Verify the cryptographic SHA-256 hash chain
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cryptographic chain verification status
+  /api/v1/audit/reconcile:
+    get:
+      summary: Verify global double-entry reconciliation and sum of balances
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: System reconciliation report
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

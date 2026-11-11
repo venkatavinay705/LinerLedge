@@ -60,12 +60,12 @@ export function errorHandler(
   }
 
   // 5. Unexpected Internal Server Errors
-  logger.error({ error: err }, 'Unhandled server error');
+  logger.error({ error: err?.message || String(err), stack: err?.stack }, 'Unhandled server error');
   res.status(500).json({
     success: false,
     error: {
       code: 'INTERNAL_ERROR',
-      message: 'An unexpected internal error occurred. Please contact system support.',
+      message: err?.message || 'An unexpected internal error occurred. Please contact system support.',
     },
   });
 }

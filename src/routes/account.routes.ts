@@ -57,7 +57,7 @@ accountRouter.post(
 // 3. Get single account by ID (Permitted or Admin/Auditor)
 accountRouter.get('/:id', async (req, res, next) => {
   try {
-    const account = await accountService.getAccountById(req.params.id, req.actor!);
+    const account = await accountService.getAccountById(req.params.id!, req.actor!);
     res.json({
       success: true,
       data: account,
@@ -75,7 +75,7 @@ accountRouter.patch(
   validateBody(updateAccountStatusSchema),
   async (req, res, next) => {
     try {
-      const updated = await accountService.updateAccountStatus(req.params.id, req.body.status);
+      const updated = await accountService.updateAccountStatus(req.params.id!, req.body.status);
       res.json({
         success: true,
         data: updated,
@@ -95,7 +95,7 @@ accountRouter.put(
   async (req, res, next) => {
     try {
       await accountService.setPermissions(
-        req.params.id,
+        req.params.id!,
         req.body.user_id,
         req.body.permissions,
         req.actor!.id
@@ -116,7 +116,7 @@ accountRouter.get(
   validateQuery(paginationQuerySchema),
   async (req, res, next) => {
     try {
-      const result = await accountService.getStatement(req.params.id, req.actor!, req.query as any);
+      const result = await accountService.getStatement(req.params.id!, req.actor!, req.query as any);
       res.json({
         success: true,
         data: result,
@@ -131,7 +131,7 @@ accountRouter.get(
 accountRouter.post(
   '/:id/deposit',
   blockAuditorWrites,
-  requireAccountPermission('DEPOSIT', (req) => req.params.id),
+  requireAccountPermission('DEPOSIT', (req) => req.params.id!),
   validateBody(depositWithdrawSchema),
   async (req, res, next) => {
     try {
@@ -140,6 +140,7 @@ accountRouter.post(
         throw new AppError('Idempotency-Key header is required for deposit operations', 400, 'IDEMPOTENCY_KEY_REQUIRED');
       }
 
+      const accountId = req.params.id!;
       const result = await idempotencyService.executeIdempotent({
         actor: req.actor!,
         key: idempotencyKey,
@@ -148,11 +149,11 @@ accountRouter.post(
         body: req.body,
         ip: req.ip,
         actionName: 'DEPOSIT',
-        destinationAccountId: req.params.id,
+        destinationAccountId: accountId,
         amount: req.body.amount,
         execute: async () => {
           const txRes = await ledgerService.deposit({
-            accountId: req.params.id,
+            accountId,
             amount: req.body.amount,
             actor: req.actor!,
             idempotencyKey,
@@ -181,7 +182,7 @@ accountRouter.post(
 accountRouter.post(
   '/:id/withdraw',
   blockAuditorWrites,
-  requireAccountPermission('WITHDRAW', (req) => req.params.id),
+  requireAccountPermission('WITHDRAW', (req) => req.params.id!),
   validateBody(depositWithdrawSchema),
   async (req, res, next) => {
     try {
@@ -190,6 +191,7 @@ accountRouter.post(
         throw new AppError('Idempotency-Key header is required for withdrawal operations', 400, 'IDEMPOTENCY_KEY_REQUIRED');
       }
 
+      const accountId = req.params.id!;
       const result = await idempotencyService.executeIdempotent({
         actor: req.actor!,
         key: idempotencyKey,
@@ -198,11 +200,11 @@ accountRouter.post(
         body: req.body,
         ip: req.ip,
         actionName: 'WITHDRAWAL',
-        sourceAccountId: req.params.id,
+        sourceAccountId: accountId,
         amount: req.body.amount,
         execute: async () => {
           const txRes = await ledgerService.withdraw({
-            accountId: req.params.id,
+            accountId,
             amount: req.body.amount,
             actor: req.actor!,
             idempotencyKey,

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ledger
+          POSTGRES_PASSWORD: ledgerpass
+          POSTGRES_DB: ledgerline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ledger -d ledgerline"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript typecheck / linter
+        run: npm run lint
+
+      - name: Execute migrations on real PostgreSQL service
+        run: npm run migrate
+        env:
+          DATABASE_URL: postgresql://ledger:ledgerpass@localhost:5432/ledgerline
+
+      - name: Seed database
+        run: npm run seed
+        env:
+          DATABASE_URL: postgresql://ledger:ledgerpass@localhost:5432/ledgerline
+
+      - name: Execute automated test suite (Integrity, Concurrency, Idempotency, Security)
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://ledger:ledgerpass@localhost:5432/ledgerline
+          JWT_SECRET: test-secret-key-at-least-32-chars-long-ledgerline
+          NODE_ENV: test

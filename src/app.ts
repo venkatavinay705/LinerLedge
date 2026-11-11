@@ -41,6 +41,11 @@ app.use('/api', apiLimiter);
 // Health Check
 app.use('/', healthRouter);
 
+// Static Web Frontend
+const publicPath = path.resolve(__dirname, '../public');
+app.use(express.static(publicPath));
+app.get('/app', (_req, res) => res.sendFile(path.join(publicPath, 'index.html')));
+
 // Versioned API Routes (/api/v1)
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);

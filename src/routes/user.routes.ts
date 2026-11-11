@@ -36,7 +36,7 @@ userRouter.get('/', async (_req, res, next) => {
 
 userRouter.patch('/:id', validateBody(updateUserSchema), async (req, res, next) => {
   try {
-    const user = await authService.updateUser(req.params.id, req.body);
+    const user = await authService.updateUser(req.params.id!, req.body);
     res.json({
       success: true,
       data: user,

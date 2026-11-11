@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth.service.js';
 import { accountService } from '../services/account.service.js';
+import { auditService } from '../services/audit.service.js';
 import { AuthActor, UserRole, PermissionType } from '../types/index.js';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 
@@ -103,6 +104,19 @@ export function requireAccountPermission(
 
       const hasPerm = await accountService.hasPermission(accountId, req.actor.id, permission);
       if (!hasPerm) {
+        await auditService
+          .logAttempt({
+            actorId: req.actor.id,
+            actorRole: req.actor.role,
+            action: req.method,
+            sourceAccountId: accountId,
+            idempotencyKey: req.header('Idempotency-Key') || null,
+            outcome: 'REFUSED',
+            reasonCode: 'FORBIDDEN',
+            ip: req.ip,
+          })
+          .catch(() => {});
+
         throw new ForbiddenError(
           `Actor does not possess ${permission} permission on account ${accountId}`
         );

@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ledgerline-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledgerpass
+      POSTGRES_DB: ledgerline
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ledger -d ledgerline']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ledgerline-app
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://ledger:ledgerpass@postgres:5432/ledgerline
+      JWT_SECRET: production-secret-key-at-least-32-chars-long-ledgerline
+      JWT_EXPIRES_IN: 1h
+      LOG_LEVEL: info
+
+volumes:
+  pgdata:
