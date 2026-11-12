@@ -28,7 +28,13 @@ export async function runMigrations(dbPool?: IDatabasePool): Promise<void> {
     const executed = new Set(executedRes.rows.map((r) => r.name));
 
     // 3. Find migration files
-    const migrationsDir = path.join(__dirname, 'migrations');
+    let migrationsDir = path.join(__dirname, 'migrations');
+    if (!fs.existsSync(migrationsDir)) {
+      const srcMigrationsDir = path.resolve(__dirname, '../../src/db/migrations');
+      if (fs.existsSync(srcMigrationsDir)) {
+        migrationsDir = srcMigrationsDir;
+      }
+    }
     const files = fs
       .readdirSync(migrationsDir)
       .filter((f) => f.endsWith('.sql'))

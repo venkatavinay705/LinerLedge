@@ -5,7 +5,7 @@
   "description": "Secure, concurrency-safe double-entry financial ledger system",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"import('fs').then(fs => fs.cpSync('src/db/migrations', 'dist/db/migrations', {recursive: true, force: true}))\"",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "migrate": "tsx src/db/migrate.ts",
