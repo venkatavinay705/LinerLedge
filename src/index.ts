@@ -2,6 +2,7 @@ import { app } from './app.js';
 import { config } from './config/index.js';
 import { getDbPool } from './db/pool.js';
 import { runMigrations } from './db/migrate.js';
+import { seed } from './db/seed.js';
 import { logger } from './utils/logger.js';
 
 async function bootstrap() {
@@ -15,7 +16,18 @@ async function bootstrap() {
     logger.info('Checking and running database migrations...');
     await runMigrations(pool);
 
-    // 3. Start Express server
+    // 3. Auto-seed if database is empty
+    const usersCountRes = await pool.query<{ count: string | number }>(
+      'SELECT COUNT(*) AS count FROM users'
+    );
+    const usersCount = Number(usersCountRes.rows[0]?.count ?? 0);
+    if (usersCount === 0) {
+      logger.info('No users detected. Automatically seeding initial demo data...');
+      await seed(pool);
+      logger.info('Initial demo data seeded successfully.');
+    }
+
+    // 4. Start Express server
     const server = app.listen(config.port, () => {
       logger.info(
         { port: config.port, env: config.nodeEnv },
